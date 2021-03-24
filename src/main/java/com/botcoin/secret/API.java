@@ -1,6 +1,15 @@
 package com.botcoin.secret;
 
-public final class ApiKeys {
+import edu.self.kraken.api.KrakenApi;
+
+public final class API {
+    public static KrakenApi SINGLETON = new KrakenApi();
+
+    static {
+        SINGLETON.setKey(API.getPublicKey());
+        SINGLETON.setSecret(API.getPrivateKey());
+    }
+
     private static final String API_BASE_URL = "https://api.kraken.com/0";
     private static final String API_PUBLIC_KEY = "uEN9HJFceqLUpJtLt05WpNE1Clqp3aiHho5e9xk4SRQa9diJCXOnpI0K"; //accessible on your Account page under Settings -> API Keys
     private static final String API_PRIVATE_KEY = "BrZ6m0DsVnPrxCc3GiT7bzmUhysOGyqJ7R3beEliIaZ1XZpTwDaKj7ZBPVqQS9YkMDlDvRna48lsXzF3vev9dg=="; //accessible on your Account page under Settings -> API Keys

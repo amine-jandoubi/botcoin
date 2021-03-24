@@ -63,7 +63,6 @@ public class KrakenApi {
         } catch (IOException ex) {
             throw new RuntimeException(ex);
         }
-
     }
 
     public static <T> T queryPublic(Method method, Class<T> type) throws IOException {

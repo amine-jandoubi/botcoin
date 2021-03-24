@@ -8,6 +8,7 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -68,6 +69,9 @@ public class AssetPairsResult extends Result<Map<String, AssetPairsResult.AssetP
         @JsonProperty("altname")
         public String alternatePairName;
 
+        @JsonProperty("wsname")
+        public String wsname;
+
         @JsonProperty("aclass_base")
         public String baseAssetClass;
 
@@ -113,6 +117,9 @@ public class AssetPairsResult extends Result<Map<String, AssetPairsResult.AssetP
 
         @JsonProperty("margin_stop")
         public Integer marginStop;
+
+        @JsonProperty("ordermin")
+        public BigDecimal ordermin;
 
         @Override
         public String toString() {

@@ -71,6 +71,8 @@ public class OpenOrdersResult extends Result<OpenOrdersResult.OpenOrders> {
 
             public String order;
 
+            public String close;
+
             @Override
             public String toString() {
                 return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
@@ -120,6 +122,8 @@ public class OpenOrdersResult extends Result<OpenOrdersResult.OpenOrders> {
 
         @JsonProperty("stopprice")
         public BigDecimal stopPrice;
+
+        public BigDecimal limitprice;
 
         @JsonProperty("misc")
         public String miscellaneous;
