@@ -4,6 +4,7 @@ import com.botcoin.secret.API;
 import com.botcoin.utils.Decimal;
 import com.botcoin.utils.JsonUtils;
 import com.botcoin.utils.LOG;
+import com.botcoin.utils.VM;
 import com.github.sbouclier.result.OHLCResult;
 import com.github.sbouclier.result.TickerInformationResult;
 import edu.self.kraken.api.KrakenApi;
@@ -19,31 +20,22 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class MovingAverage {
+public class MovingAverageStrategy {
 
-    // Configs
-    public static final int MV_AVERAGE_INTERVAL_IN_MINUTES = 30;
-    public static final int MV_AVERAGE_WINDOW = 15;
-    public static final int MINIMUM_NUMBER_OF_PROFIT_UNDER_AVERAGE = 30;
 
     /**
      * The last price is under the average.
      * The number of points where the take profit is under the average is more than 40.
      */
-    public static Predicate<TickerInfoDTO> PREDICATE1 = tickerINFO -> tickerINFO.difference.doubleValue() > 0;
-    public static Predicate<TickerInfoDTO> PREDICATE2 = tickerINFO -> tickerINFO.avgOhlcCount.doubleValue() > 20;
-    public static Predicate<TickerInfoDTO> PREDICATE3 = tickerINFO -> tickerINFO.numerOfTakeprofitLessThanAverage > MINIMUM_NUMBER_OF_PROFIT_UNDER_AVERAGE;
+    public static Predicate<TickerInfoDTO> PREDICATE1 = tickerINFO -> tickerINFO.difference.doubleValue() > VM.getInt(VM.MV_MINIMUM_CLOSE_TO_AVG_DIFF);
+    public static Predicate<TickerInfoDTO> PREDICATE2 = tickerINFO -> tickerINFO.avgOhlcCount.doubleValue() > VM.getInt(VM.MV_MINIMUM_OHLC_COUNT_AVG);
 
-    public static Predicate<TickerInfoDTO> FILTER = PREDICATE1.and(PREDICATE2).and(PREDICATE3);
+    public static Predicate<TickerInfoDTO> FILTER = PREDICATE1.and(PREDICATE2);
 
     /**
-     * maximise the trading trafic
+     * Maximise the trading trafic
      */
-    public static Comparator<TickerInfoDTO> MAXIMIZER = Comparator.comparingDouble(tickerInfoDTO -> tickerInfoDTO.difference.doubleValue());
-
-    public static void main(String[] args) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        System.out.println(getBest());
-    }
+    public static Comparator<TickerInfoDTO> MAXIMIZER = Comparator.comparingLong(tickerINFO -> tickerINFO.numerOfTakeprofitLessThanAverage);
 
     public static TickerInfoDTO getBest() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
         LOG.info("Finding tickers doing less than the Average....");
@@ -52,7 +44,7 @@ public class MovingAverage {
         List<TickerInfoDTO> tickersUnderMovingAverage = API.getPairs().getResult().keySet().parallelStream()
                 .filter(pair -> pair.endsWith("EUR")).map(pair -> {
                     try {
-                        TickerInfoDTO mvAvg = getTickerInfosWithMvAVGOnly(pair, MV_AVERAGE_INTERVAL_IN_MINUTES, MV_AVERAGE_WINDOW);
+                        TickerInfoDTO mvAvg = getTickerInfosWithMvAVGOnly(pair, VM.getInt(VM.MV_INTERVAL_IN_MINUTES), VM.getInt(VM.MV_MOVING_WINDOW));
                         filFormTickerInformationResult(mvAvg, tickerInfos);
                         LOG.debug(mvAvg);
                         return mvAvg;
@@ -76,7 +68,13 @@ public class MovingAverage {
         tickerInfoDTO.spread = tickerInfoDTO.ask.add(tickerInfoDTO.bid.negate());
         tickerInfoDTO.volume = tickerInformationFormAPI.volume.today;
         tickerInfoDTO.highest = tickerInformationFormAPI.high.today;
-        tickerInfoDTO.takeProfit = Decimal.format("#.######", WatchTrade.takeProfit(tickerInfoDTO.ask.doubleValue()));
+        tickerInfoDTO.takeProfit = WatchTrade.takeProfit(tickerInfoDTO.ask.doubleValue());
+
+        // calculate number of profit points under average.
+        tickerInfoDTO.numerOfTakeprofitLessThanAverage = 0;
+        for (TimeFunction.Value value : tickerInfoDTO.movingAverageTimeFunction.getValues())
+            if (tickerInfoDTO.takeProfit.doubleValue() <= value.value.doubleValue())
+                tickerInfoDTO.numerOfTakeprofitLessThanAverage++;
     }
 
     public static TickerInfoDTO getTickerInfosWithMvAVGOnly(String pair, int intervalOfValues, int intervalOfMovingAverage) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
@@ -84,6 +82,7 @@ public class MovingAverage {
         TimeFunction function = createTimeFunction(ohlcs, intervalOfMovingAverage);
         int last = ohlcs.size() - 1;
         TickerInfoDTO tickerInfoDTO = new TickerInfoDTO();
+        tickerInfoDTO.movingAverageTimeFunction = function;
         tickerInfoDTO.pair = pair;
         tickerInfoDTO.mvAvg = function.getValues().get(last).value;
         tickerInfoDTO.lastClose = ohlcs.get(last).close;
@@ -91,15 +90,12 @@ public class MovingAverage {
         tickerInfoDTO.difference = tickerInfoDTO.mvAvg.add(tickerInfoDTO.lastClose.negate());
         tickerInfoDTO.volatility = function.volatility;
         tickerInfoDTO.avgOhlcCount = function.avgCount;
-        tickerInfoDTO.numerOfTakeprofitLessThanAverage = function.takeprofitLessThanAverage;
         return tickerInfoDTO;
     }
 
 
     public static TimeFunction createTimeFunction(List<OHLCResult.OHLC> ohlcs, int interval) {
         TimeFunction timeFunction = new TimeFunction();
-        BigDecimal lastPrice = ohlcs.get(ohlcs.size() - 1).close;
-        BigDecimal takeProfit = WatchTrade.takeProfit(lastPrice.doubleValue());
         for (int counter = 0; counter < interval; counter++)
             timeFunction.add(ohlcs.get(counter).time, new BigDecimal(0));
 
@@ -120,8 +116,6 @@ public class MovingAverage {
             timeFunction.avgCount = timeFunction.avgCount.add(new BigDecimal(ohlc.count / ohlcs.size()));
             indexLow++;
             indexHiGH++;
-            if (takeProfit.doubleValue() < avg.doubleValue())
-                timeFunction.takeprofitLessThanAverage++;
         }
         timeFunction.volatility = Decimal.format("#.######", timeFunction.volatility);
         return timeFunction;
@@ -147,6 +141,7 @@ public class MovingAverage {
         public BigDecimal highest;
         public long numerOfTakeprofitLessThanAverage;
         public BigDecimal avgOhlcCount;
+        public TimeFunction movingAverageTimeFunction;
 
         @Override
         public String toString() {
@@ -166,7 +161,6 @@ public class MovingAverage {
         private List<Value> values = new ArrayList();
         private BigDecimal volatility = new BigDecimal(0);
         private BigDecimal avgCount = new BigDecimal(0);
-        private long takeprofitLessThanAverage = 0;
 
         public void add(int time, BigDecimal value) {
             this.values.add(new Value(time, value));

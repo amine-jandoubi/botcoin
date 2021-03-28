@@ -1,1 +1,1 @@
-tail -f kernel.log
+tail -f log/kernel.log

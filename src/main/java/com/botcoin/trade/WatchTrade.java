@@ -1,10 +1,7 @@
 package com.botcoin.trade;
 
 import com.botcoin.secret.API;
-import com.botcoin.utils.Decimal;
-import com.botcoin.utils.JsonUtils;
-import com.botcoin.utils.LOG;
-import com.botcoin.utils.ThreadUtils;
+import com.botcoin.utils.*;
 import com.github.sbouclier.result.OpenOrdersResult;
 import com.github.sbouclier.result.TickerInformationResult;
 import com.github.sbouclier.result.common.OrderDirection;
@@ -20,11 +17,12 @@ import java.util.Optional;
 
 public class WatchTrade {
 
-    public static double PROFIT = 0.004;
+    public static double PROFIT = 0.006;
 
     public static String LEVERAGE = "2:1";
 
-    private static final int TRY_NUMBER = 30;
+    private static final int TRY_NUMBER_TO_BUY_LOWER = 10;
+    private static final int TRY_NUMBER_TO_ENTER_MARKET = 5;
 
     private String pair;
 
@@ -60,21 +58,21 @@ public class WatchTrade {
 
     public boolean buyWhenMaker() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
 
-        for (int tryNumberToBuy = 0; tryNumberToBuy < TRY_NUMBER; tryNumberToBuy++) {
+        for (int tryNumberToBuy = 0; tryNumberToBuy < TRY_NUMBER_TO_BUY_LOWER; tryNumberToBuy++) {
             double price = getPriceBetweenAskAndBid();
             this.takeProfit = takeProfit(price).doubleValue();
             this.amount = Decimal.format("#.######", this.investment / price);
-            int tryNumberInOrderBook = TRY_NUMBER;
+            int tryNumberInOrderBook = TRY_NUMBER_TO_ENTER_MARKET;
 
             if (makeBuyOrder(price).contains("Insufficient funds"))
                 return false;
 
             while (isInOrderBook(OrderDirection.BUY).isEmpty()) {
                 LOG.debug(this.pair + " Buy order of " + this.pair + " not yet in Order Book: " + this.getAskPrice() + " demand is:" + price);
-                ThreadUtils.sleepCatchingException(3_000);
-                LOG.info("Try number to buy " + tryNumberInOrderBook + "/" + TRY_NUMBER);
+                ThreadUtils.sleepCatchingException(1_000);
+                LOG.info("Try number to buy " + tryNumberInOrderBook + "/" + TRY_NUMBER_TO_ENTER_MARKET);
                 if (--tryNumberInOrderBook == 0)
-                    return false;
+                    continue;
             }
 
             while (isInOrderBook(OrderDirection.BUY).isPresent()) {
@@ -88,11 +86,11 @@ public class WatchTrade {
 
     public void sellWhenMaker() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
         makeSellOrder(this.takeProfit);
-        int tryNumber = TRY_NUMBER;
+        int tryNumber = TRY_NUMBER_TO_BUY_LOWER;
         while (isInOrderBook(OrderDirection.SELL).isEmpty()) {
             LOG.debug(this.pair + " SELL order of " + this.pair + " not yet in Order Book: " + this.getBidPrice() + " demand is:" + this.takeProfit);
             ThreadUtils.sleepCatchingException(5_000);
-            LOG.info("Try number to sell " + tryNumber + "/" + TRY_NUMBER);
+            LOG.info("Try number to sell " + tryNumber + "/" + TRY_NUMBER_TO_BUY_LOWER);
             if (tryNumber-- == 0)
                 return;
         }
@@ -117,9 +115,9 @@ public class WatchTrade {
         values.put("ordertype", "limit");
         values.put("volume", this.amount.toString());
         values.put("oflags", "fciq,post");
-        values.put("LEVERAGE ", "2:1");
+        values.put("leverage ", LEVERAGE);
         LOG.info(values);
-        if (Runner.PROD) {
+        if (VM.isProd()) {
             String response = API.SINGLETON.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
             LOG.consolePretty(response);
             return response;
@@ -137,7 +135,7 @@ public class WatchTrade {
         values.put("volume", this.amount.toString());
         values.put("oflags", "fciq,post");
         LOG.info(values);
-        if (Runner.PROD) {
+        if (VM.isProd()) {
             String response = API.SINGLETON.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
             while (response.contains("Rate limit exceeded")) {
                 ThreadUtils.sleepCatchingException(5_000);
@@ -166,7 +164,6 @@ public class WatchTrade {
                 ", investment=" + investment +
                 ", takeProfit=" + takeProfit +
                 ", amount=" + amount +
-                ", tryNumber=" + TRY_NUMBER +
                 '}';
     }
 }
