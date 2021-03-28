@@ -8,4 +8,8 @@ public class ThreadUtils {
             e.printStackTrace();
         }
     }
+
+    public static void sleep5CatchingException() {
+        sleepCatchingException(5_000);
+    }
 }

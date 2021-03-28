@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * @author Stéphane Bouclier
  */
-public class OHLCResult extends ResultWithLastId<Map<String, List<OHLCResult.OHLC>>> {
+public class OHLCResult extends ResultWithLastId<Map<String, Object>> {
 
     @JsonFormat(shape = JsonFormat.Shape.ARRAY)
     @JsonPropertyOrder({"time", "open", "high", "low", "close", "vwap", "volume", "count"})

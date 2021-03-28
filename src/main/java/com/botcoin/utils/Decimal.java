@@ -5,29 +5,26 @@ import java.text.DecimalFormat;
 
 public class Decimal {
 
-    public static BigDecimal round(BigDecimal toROund) {
-        return new BigDecimal(new DecimalFormat("#.#").format(toROund));
+
+    public static BigDecimal format(String format, double toROund) {
+        return new BigDecimal(new DecimalFormat(format).format(toROund).replace(",", "."));
     }
 
-    public static BigDecimal round2(double toROund) {
-        return new BigDecimal(new DecimalFormat("#.##").format(toROund));
+    public static BigDecimal format(String format, BigDecimal toROund) {
+        return new BigDecimal(new DecimalFormat(format).format(toROund).replace(",", "."));
     }
 
-    public static BigDecimal round(double toROund) {
-        return new BigDecimal(new DecimalFormat("#.#").format(toROund));
+    public static String getFormat(double number) {
+        int index = new StringBuilder(String.valueOf(number)).reverse().toString().indexOf(".");
+        StringBuilder sb = new StringBuilder("#.");
+        for (int i = 0; i < index; i++)
+            sb.append("#");
+        return sb.toString();
     }
 
-    public static double roundDouble(double toROund) {
-        return new BigDecimal(new DecimalFormat("#.####").format(toROund)).doubleValue();
+    public static BigDecimal formatLike(double numnberFOrmat, double number) {
+        return format(getFormat(numnberFOrmat), number);
     }
 
-
-    public static BigDecimal round6(double toROund) {
-        return new BigDecimal(new DecimalFormat("#.######").format(toROund));
-    }
-
-    public static double round6d(double toROund) {
-        return new BigDecimal(new DecimalFormat("#.######").format(toROund)).doubleValue();
-    }
 
 }

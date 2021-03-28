@@ -39,19 +39,29 @@ class ApiRequest {
     private static final String AMPERSAND = "&";
     private static final String EQUAL_SIGN = "=";
 
-    /** The request URL. */
+    /**
+     * The request URL.
+     */
     private URL url;
 
-    /** The request message signature. */
+    /**
+     * The request message signature.
+     */
     private String signature;
 
-    /** The API key. */
+    /**
+     * The API key.
+     */
     private String key;
 
-    /** The request's POST data. */
+    /**
+     * The request's POST data.
+     */
     private StringBuilder postData;
 
-    /** Tells whether the API method is public or private. */
+    /**
+     * Tells whether the API method is public or private.
+     */
     private boolean isPublic;
 
     /**
@@ -59,7 +69,7 @@ class ApiRequest {
      *
      * @return the request's response
      * @throws IOException if the underlying {@link HttpsURLConnection} could
-     *         not be set up or executed
+     *                     not be set up or executed
      */
     public String execute() throws IOException {
 
@@ -102,8 +112,7 @@ class ApiRequest {
 
                 return response.toString();
             }
-        }
-        finally {
+        } finally {
             connection.disconnect();
         }
     }
@@ -114,7 +123,7 @@ class ApiRequest {
      * @param method the API method
      * @return the path of the request taking the method into account
      * @throws MalformedURLException if the request URL could not be created
-     *         with the method name
+     *                               with the method name
      */
     public String setMethod(Method method) throws MalformedURLException {
 
@@ -133,10 +142,10 @@ class ApiRequest {
      *
      * @param parameters a map containing parameter names and values.
      * @return the parameters in POST data format, or null if the parameters are
-     *         null or empty
+     * null or empty
      * @throws UnsupportedEncodingException if the named encoding is not
-     *         supported
-     * @throws IllegalArgumentException if the map is null of empty
+     *                                      supported
+     * @throws IllegalArgumentException     if the map is null of empty
      */
     public String setParameters(Map<String, String> parameters) throws UnsupportedEncodingException {
 

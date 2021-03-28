@@ -1,5 +1,7 @@
 package com.github.sbouclier.result;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Result wrapper with last id
  *
@@ -7,13 +9,13 @@ package com.github.sbouclier.result;
  * @author Stéphane Bouclier
  */
 public class ResultWithLastId<T> extends Result<T> {
-    private Long lastId = 0L;
+    private Long last = 0L;
 
-    public Long getLastId() {
-        return lastId;
+    public Long getLast() {
+        return last;
     }
 
-    public void setLastId(Long lastId) {
-        this.lastId = lastId;
+    public void setLast(Long lastId) {
+        this.last = lastId;
     }
 }

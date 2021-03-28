@@ -3,122 +3,150 @@ package com.botcoin.trade;
 import com.botcoin.secret.API;
 import com.botcoin.utils.Decimal;
 import com.botcoin.utils.JsonUtils;
-import com.botcoin.utils.Logger;
+import com.botcoin.utils.LOG;
+import com.botcoin.utils.ThreadUtils;
+import com.github.sbouclier.result.OpenOrdersResult;
 import com.github.sbouclier.result.TickerInformationResult;
+import com.github.sbouclier.result.common.OrderDirection;
 import edu.self.kraken.api.KrakenApi;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class WatchTrade {
-    public static double PROFIT = 0.006;
-    public static double LOSS = 0.05;
+
+    public static double PROFIT = 0.004;
+
+    public static String LEVERAGE = "2:1";
+
+    private static final int TRY_NUMBER = 30;
 
     private String pair;
-    KrakenApi api = new KrakenApi();
 
     private double investment;
+
     private double takeProfit;
-    private double stopLoss;
 
-    private double askPrice;
-    private double bidPrice;
-    private double amount;
+    private BigDecimal amount;
 
-    public WatchTrade(String pair, double investment) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        api.setKey(API.getPublicKey());
-        api.setSecret(API.getPrivateKey());
 
+    public WatchTrade(String pair, double investment) {
         this.pair = pair;
         this.investment = investment;
-        String response = this.api.queryPrivate(KrakenApi.Method.TICKER, Map.of("pair", this.pair));
-
-        TickerInformationResult.TickerInformation tickerInfos = JsonUtils.toObject(response, TickerInformationResult.class).getResult().get(this.pair);
-        this.askPrice = tickerInfos.ask.price.doubleValue();
-        this.bidPrice = tickerInfos.bid.price.doubleValue();
-
-        this.takeProfit = Decimal.round6d(askPrice + askPrice * PROFIT);
-        this.stopLoss = Decimal.round6d(bidPrice - bidPrice * LOSS);
-        this.amount = Decimal.roundDouble(this.investment / this.askPrice);
     }
 
-    public WatchTrade(String pair, double stopLoss, double takeProfit, double amount) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        api.setKey(API.getPublicKey());
-        api.setSecret(API.getPrivateKey());
-
-        this.pair = pair;
-        this.takeProfit = takeProfit;
-        this.stopLoss = stopLoss;
-        this.amount = amount;
+    public static BigDecimal takeProfit(double askPrice) {
+        return Decimal.formatLike(askPrice, askPrice + askPrice * PROFIT);
     }
-
 
     public void run() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        buy();
-        double price;
-        do {
-            price = getBidPrice();
-            Logger.info(this.pair + " | " + this.stopLoss + " < " + price + " < " + this.takeProfit);
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        boolean bought = buyWhenMaker();
+        if (bought) {
+            ThreadUtils.sleepCatchingException(5_000);
+            sellWhenMaker();
         }
-        while (price < this.takeProfit && price > this.stopLoss);
-        sell();
+
     }
 
-    public void runWithoutBuy() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        double price;
-        do {
-            price = getBidPrice();
-            Logger.info(this.stopLoss + " < " + price + " < " + this.takeProfit);
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        while (price < this.takeProfit && price > this.stopLoss);
-        sell();
+    public double getPriceBetweenAskAndBid() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+        double askPlusBid = 0.5 * (getAskPrice() + getBidPrice());
+        return Decimal.formatLike(getAskPrice(), askPlusBid).doubleValue();
     }
 
-    public void buy() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        double price = getAskPrice();
-        Logger.info("buy at: " + price);
+    public boolean buyWhenMaker() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+
+        for (int tryNumberToBuy = 0; tryNumberToBuy < TRY_NUMBER; tryNumberToBuy++) {
+            double price = getPriceBetweenAskAndBid();
+            this.takeProfit = takeProfit(price).doubleValue();
+            this.amount = Decimal.format("#.######", this.investment / price);
+            int tryNumberInOrderBook = TRY_NUMBER;
+
+            if (makeBuyOrder(price).contains("Insufficient funds"))
+                return false;
+
+            while (isInOrderBook(OrderDirection.BUY).isEmpty()) {
+                LOG.debug(this.pair + " Buy order of " + this.pair + " not yet in Order Book: " + this.getAskPrice() + " demand is:" + price);
+                ThreadUtils.sleepCatchingException(3_000);
+                LOG.info("Try number to buy " + tryNumberInOrderBook + "/" + TRY_NUMBER);
+                if (--tryNumberInOrderBook == 0)
+                    return false;
+            }
+
+            while (isInOrderBook(OrderDirection.BUY).isPresent()) {
+                LOG.debug(this.pair + " not yet executed: " + this.getAskPrice() + " demand is:" + price);
+                ThreadUtils.sleepCatchingException(5_000);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public void sellWhenMaker() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+        makeSellOrder(this.takeProfit);
+        int tryNumber = TRY_NUMBER;
+        while (isInOrderBook(OrderDirection.SELL).isEmpty()) {
+            LOG.debug(this.pair + " SELL order of " + this.pair + " not yet in Order Book: " + this.getBidPrice() + " demand is:" + this.takeProfit);
+            ThreadUtils.sleepCatchingException(5_000);
+            LOG.info("Try number to sell " + tryNumber + "/" + TRY_NUMBER);
+            if (tryNumber-- == 0)
+                return;
+        }
+    }
+
+
+    public static Optional<OpenOrdersResult.OpenOrder> isInOrderBook(OrderDirection orderDirection) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+        String response = API.SINGLETON.queryPrivate(KrakenApi.Method.OPEN_ORDERS);
+        OpenOrdersResult openOrdersResult = JsonUtils.toObject(response, OpenOrdersResult.class);
+        if (openOrdersResult.getResult() == null || openOrdersResult.getResult().open == null)
+            return Optional.empty(); // tolerate errors
+        return openOrdersResult.getResult().open.values().stream().filter(order -> order.description.orderDirection.equals(orderDirection)).findAny();
+    }
+
+
+    public String makeBuyOrder(double price) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+        LOG.info("buy at: " + price);
         HashMap<String, String> values = new HashMap();
         values.put("pair", this.pair);
         values.put("type", "buy");
-        values.put("ordertype", "market");
-        values.put("volume", String.valueOf(this.amount));
-        values.put("oflags", "fciq");
-        Logger.info(values);
-        if (Prices.PROD) {
-            String response = this.api.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
-            Logger.consolePretty(response);
+        values.put("price", String.valueOf(price));
+        values.put("ordertype", "limit");
+        values.put("volume", this.amount.toString());
+        values.put("oflags", "fciq,post");
+        values.put("LEVERAGE ", "2:1");
+        LOG.info(values);
+        if (Runner.PROD) {
+            String response = API.SINGLETON.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
+            LOG.consolePretty(response);
+            return response;
         }
-
+        return null;
     }
 
-    public void sell() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        double price = getBidPrice();
-        Logger.info("sell at: " + price);
+    public String makeSellOrder(double price) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
+        LOG.info("sell at: " + price);
         HashMap<String, String> values = new HashMap();
         values.put("pair", this.pair);
         values.put("type", "sell");
-        values.put("ordertype", "limit");
         values.put("price", String.valueOf(price));
-        values.put("volume", String.valueOf(this.amount));
-        values.put("oflags", "fciq");
-        Logger.info(values);
-        if (Prices.PROD) {
-            String response = this.api.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
-            Logger.consolePretty(response);
+        values.put("ordertype", "limit");
+        values.put("volume", this.amount.toString());
+        values.put("oflags", "fciq,post");
+        LOG.info(values);
+        if (Runner.PROD) {
+            String response = API.SINGLETON.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
+            while (response.contains("Rate limit exceeded")) {
+                ThreadUtils.sleepCatchingException(5_000);
+                response = API.SINGLETON.queryPrivate(KrakenApi.Method.ADD_ORDER, values);
+            }
+            LOG.consolePretty(response);
+            return response;
         }
+        return null;
     }
 
     public double getBidPrice() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
@@ -133,24 +161,12 @@ public class WatchTrade {
 
     @Override
     public String toString() {
-        try {
-            return "TopPerformerTrade{" +
-                    "pair='" + pair + '\'' +
-                    ", api=" + api +
-                    ", investment=" + investment +
-                    ", takeProfit=" + takeProfit +
-                    ", stopLoss=" + stopLoss +
-                    ", openPrice=" + askPrice +
-                    ", amount=" + amount +
-                    ", price=" + this.getBidPrice() +
-                    '}';
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        } catch (InvalidKeyException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return "";
+        return "WatchTrade{" +
+                "pair='" + pair + '\'' +
+                ", investment=" + investment +
+                ", takeProfit=" + takeProfit +
+                ", amount=" + amount +
+                ", tryNumber=" + TRY_NUMBER +
+                '}';
     }
 }
