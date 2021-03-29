@@ -72,7 +72,7 @@ public class WatchTrade {
                 return false;
 
             boolean notYetBought = true;
-            while (isInOrderBook(OrderDirection.BUY).isEmpty() && notYetBought) {
+            while (!isInOrderBook(OrderDirection.BUY).isPresent() && notYetBought) {
                 LOG.debug(this.pair + " Buy order of " + this.pair + " not yet in Order Book: " + this.getAskPrice() + " demand is:" + price);
                 ThreadUtils.sleepCatchingException(1_000);
                 LOG.info("Try number to buy " + this.pair + " " + tryNumberInOrderBook + "/" + TRY_NUMBER_TO_ENTER_MARKET);
@@ -93,7 +93,7 @@ public class WatchTrade {
     public void sellWhenMaker() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
         makeSellOrder(this.takeProfit);
         int tryNumber = TRY_NUMBER_TO_BUY_LOWER;
-        while (isInOrderBook(OrderDirection.SELL).isEmpty()) {
+        while (!isInOrderBook(OrderDirection.SELL).isPresent()) {
             LOG.debug(this.pair + " SELL order of " + this.pair + " not yet in Order Book: " + this.getBidPrice() + " demand is:" + this.takeProfit);
             ThreadUtils.sleepCatchingException(5_000);
             LOG.info("Try number to sell " + tryNumber + "/" + TRY_NUMBER_TO_BUY_LOWER);

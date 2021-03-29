@@ -34,8 +34,13 @@ public class Runner {
                 // sleep 1 minute if a connection refused error is thrown.
             }
 
-            while (API.getBalanceInCcy("ZEUR") < VM.getInt(VM.INVESTMENT_MIN_EUR)) {
-                LOG.info("Balance in EUR is lower than " + VM.getInt(VM.INVESTMENT_MIN_EUR) + " EUR, waiting " + VM.getInt(VM.INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR) + " minutes to replay...");
+            if (API.getBalanceInCcy("ZEUR") < VM.getInt(VM.INVESTMENT_MIN_EUR))
+                while (API.getBalanceInCcy("ZEUR") < VM.getInt(VM.INVESTMENT_MIN_EUR)) {
+                    LOG.info("[RUN NEW TRADE] Balance in EUR " + API.getBalanceInCcy("ZEUR") + " is lower than " + VM.getInt(VM.INVESTMENT_MIN_EUR) + " EUR, waiting " + VM.getInt(VM.INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR) + " minutes to replay...");
+                    ThreadUtils.sleepCatchingException(VM.getInt(VM.INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR) * 60_000);
+                }
+            else {
+                LOG.info("[RUN NEW TRADE] Balance in EUR is " + API.getBalanceInCcy("ZEUR") + ", Waiting " + VM.getInt(VM.INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR) + " minutes to find another performer...");
                 ThreadUtils.sleepCatchingException(VM.getInt(VM.INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR) * 60_000);
             }
         }
