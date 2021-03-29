@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 public class WatchTrade {
 
@@ -27,6 +28,8 @@ public class WatchTrade {
     private String pair;
 
     private double investment;
+
+    private double buyPrice;
 
     private double takeProfit;
 
@@ -44,6 +47,7 @@ public class WatchTrade {
 
     public void run() throws NoSuchAlgorithmException, InvalidKeyException, IOException {
         boolean bought = buyWhenMaker();
+        LOG.info(this.pair + " is bought at " + buyPrice + ", taking profit " + takeProfit);
         if (bought) {
             ThreadUtils.sleepCatchingException(5_000);
             sellWhenMaker();
@@ -67,18 +71,20 @@ public class WatchTrade {
             if (makeBuyOrder(price).contains("Insufficient funds"))
                 return false;
 
-            while (isInOrderBook(OrderDirection.BUY).isEmpty()) {
+            boolean notYetBought = true;
+            while (isInOrderBook(OrderDirection.BUY).isEmpty() && notYetBought) {
                 LOG.debug(this.pair + " Buy order of " + this.pair + " not yet in Order Book: " + this.getAskPrice() + " demand is:" + price);
                 ThreadUtils.sleepCatchingException(1_000);
-                LOG.info("Try number to buy " + tryNumberInOrderBook + "/" + TRY_NUMBER_TO_ENTER_MARKET);
-                if (--tryNumberInOrderBook == 0)
-                    continue;
+                LOG.info("Try number to buy " + this.pair + " " + tryNumberInOrderBook + "/" + TRY_NUMBER_TO_ENTER_MARKET);
+                if (tryNumberInOrderBook-- < 1)
+                    notYetBought = false;
             }
 
             while (isInOrderBook(OrderDirection.BUY).isPresent()) {
                 LOG.debug(this.pair + " not yet executed: " + this.getAskPrice() + " demand is:" + price);
                 ThreadUtils.sleepCatchingException(5_000);
             }
+            this.buyPrice = price;
             return true;
         }
         return false;

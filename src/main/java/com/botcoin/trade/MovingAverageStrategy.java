@@ -13,10 +13,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -27,10 +24,12 @@ public class MovingAverageStrategy {
      * The last price is under the average.
      * The number of points where the take profit is under the average is more than 40.
      */
-    public static Predicate<TickerInfoDTO> PREDICATE1 = tickerINFO -> tickerINFO.difference.doubleValue() > VM.getInt(VM.MV_MINIMUM_CLOSE_TO_AVG_DIFF);
+    public static Predicate<TickerInfoDTO> PREDICATE1 = tickerINFO -> tickerINFO.difference.doubleValue() > VM.getInt(VM.MV_DIFFERANCE_CLOSE_TO_AVG_DIFF);
     public static Predicate<TickerInfoDTO> PREDICATE2 = tickerINFO -> tickerINFO.avgOhlcCount.doubleValue() > VM.getInt(VM.MV_MINIMUM_OHLC_COUNT_AVG);
+    public static Predicate<TickerInfoDTO> PREDICATE3 = tickerINFO -> tickerINFO.numerOfTakeprofitLessThanAverage > VM.getInt(VM.MV_MIN_TAKE_PROFIT_UNDER_AVG);
+    public static Predicate<TickerInfoDTO> PREDICATE4 = tickerINFO -> tickerINFO.volatility.doubleValue() > VM.getDecimal(VM.MV_MIN_VOLATILITY).doubleValue();
 
-    public static Predicate<TickerInfoDTO> FILTER = PREDICATE1.and(PREDICATE2);
+    public static Predicate<TickerInfoDTO> FILTER = PREDICATE1.and(PREDICATE2).and(PREDICATE3).and(PREDICATE4);
 
     /**
      * Maximise the trading trafic
@@ -45,14 +44,16 @@ public class MovingAverageStrategy {
                 .filter(pair -> pair.endsWith("EUR")).map(pair -> {
                     try {
                         TickerInfoDTO mvAvg = getTickerInfosWithMvAVGOnly(pair, VM.getInt(VM.MV_INTERVAL_IN_MINUTES), VM.getInt(VM.MV_MOVING_WINDOW));
-                        filFormTickerInformationResult(mvAvg, tickerInfos);
+                        if (mvAvg == null)
+                            return null;
+                        fillFormTickerInformationResult(mvAvg, tickerInfos);
                         LOG.debug(mvAvg);
                         return mvAvg;
                     } catch (NoSuchAlgorithmException | InvalidKeyException | IOException e) {
                         e.printStackTrace();
                     }
                     return new TickerInfoDTO();
-                }).filter(FILTER).collect(Collectors.toList());
+                }).filter(Objects::nonNull).filter(FILTER).collect(Collectors.toList());
 
         tickersUnderMovingAverage.forEach(LOG::info);
 
@@ -61,7 +62,7 @@ public class MovingAverageStrategy {
         return result;
     }
 
-    public static void filFormTickerInformationResult(TickerInfoDTO tickerInfoDTO, Map<String, TickerInformationResult.TickerInformation> tickersMap) {
+    public static void fillFormTickerInformationResult(TickerInfoDTO tickerInfoDTO, Map<String, TickerInformationResult.TickerInformation> tickersMap) {
         TickerInformationResult.TickerInformation tickerInformationFormAPI = tickersMap.get(tickerInfoDTO.pair);
         tickerInfoDTO.ask = tickerInformationFormAPI.ask.price;
         tickerInfoDTO.bid = tickerInformationFormAPI.bid.price;
@@ -79,6 +80,9 @@ public class MovingAverageStrategy {
 
     public static TickerInfoDTO getTickerInfosWithMvAVGOnly(String pair, int intervalOfValues, int intervalOfMovingAverage) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
         List<OHLCResult.OHLC> ohlcs = getOHLC(pair, intervalOfValues);
+        if (ohlcs.isEmpty())
+            return null;
+
         TimeFunction function = createTimeFunction(ohlcs, intervalOfMovingAverage);
         int last = ohlcs.size() - 1;
         TickerInfoDTO tickerInfoDTO = new TickerInfoDTO();
@@ -89,7 +93,7 @@ public class MovingAverageStrategy {
         // maybe replace it with ask or bid , think !!
         tickerInfoDTO.difference = tickerInfoDTO.mvAvg.add(tickerInfoDTO.lastClose.negate());
         tickerInfoDTO.volatility = function.volatility;
-        tickerInfoDTO.avgOhlcCount = function.avgCount;
+        tickerInfoDTO.avgOhlcCount = function.ohlcCount;
         return tickerInfoDTO;
     }
 
@@ -113,7 +117,7 @@ public class MovingAverageStrategy {
             timeFunction.add(ohlc.time, avg);
             double volatility = Math.pow(ohlc.close.doubleValue() - avg.doubleValue(), 2);
             timeFunction.volatility = timeFunction.volatility.add(new BigDecimal(volatility));
-            timeFunction.avgCount = timeFunction.avgCount.add(new BigDecimal(ohlc.count / ohlcs.size()));
+            timeFunction.ohlcCount = timeFunction.ohlcCount.add(new BigDecimal(ohlc.count));
             indexLow++;
             indexHiGH++;
         }
@@ -122,8 +126,11 @@ public class MovingAverageStrategy {
     }
 
     public static List<OHLCResult.OHLC> getOHLC(String pair, int intervalInMinutes) throws NoSuchAlgorithmException, InvalidKeyException, IOException {
-        String repsonse = API.SINGLETON.queryPrivate(KrakenApi.Method.OHLC, Map.of("pair", pair, "interval", Integer.valueOf(intervalInMinutes).toString()));
-        OHLCResult ohlcResult = JsonUtils.toObject(repsonse, OHLCResult.class);
+        String response = API.SINGLETON.queryPrivate(KrakenApi.Method.OHLC, Map.of("pair", pair, "interval", Integer.valueOf(intervalInMinutes).toString()));
+        OHLCResult ohlcResult = JsonUtils.toObject(response, OHLCResult.class);
+        if (ohlcResult.getResult() == null)
+            return Collections.emptyList();
+
         return (List<OHLCResult.OHLC>) ((List) ohlcResult.getResult().get(pair)).stream().map(value -> JsonUtils.toObject(value.toString(), OHLCResult.OHLC.class)).collect(Collectors.toList());
     }
 
@@ -160,7 +167,7 @@ public class MovingAverageStrategy {
     public static class TimeFunction {
         private List<Value> values = new ArrayList();
         private BigDecimal volatility = new BigDecimal(0);
-        private BigDecimal avgCount = new BigDecimal(0);
+        private BigDecimal ohlcCount = new BigDecimal(0);
 
         public void add(int time, BigDecimal value) {
             this.values.add(new Value(time, value));

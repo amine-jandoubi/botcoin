@@ -20,7 +20,7 @@ public final class API {
     public static KrakenApi SINGLETON = new KrakenApi();
 
     static {
-        SINGLETON.setKey(VM.get(VM.API_PUBLIC_HOST));
+        SINGLETON.setKey(VM.get(VM.API_PUBLIC_KEY));
         SINGLETON.setSecret(VM.get(VM.API_PRIVATE_KEY));
     }
 

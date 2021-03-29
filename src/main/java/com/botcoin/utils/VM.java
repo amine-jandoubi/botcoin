@@ -16,11 +16,14 @@ public class VM {
     public static String MV_INTERVAL_IN_MINUTES = "mv.intervalInMinutes";
     public static String MV_MOVING_WINDOW = "mv.movingWindow";
     public static String MV_MINIMUM_OHLC_COUNT_AVG = "mv.minimumOhlcCountAvg";
-    public static String MV_MINIMUM_CLOSE_TO_AVG_DIFF = "mv.minimumCloseToAVGDIff";
+    public static String MV_DIFFERANCE_CLOSE_TO_AVG_DIFF = "mv.minimumCloseToAVGDIff";
+    public static String MV_MIN_TAKE_PROFIT_UNDER_AVG = "mv.minimumTakeProfitUnderAvg";
+    public static String MV_MIN_VOLATILITY = "mv.minimumVolatility";
 
     // INVESTMENT Specifications
     public static String INVESTMENT_MIN_EUR = "investment.minimumEur";
     public static String INVESTMENT_PER_TRADE = "investment.perTrade";
+    public static String INVESTMENT_TIME_TO_WAIT_WHEN_MIN_EUR = "investment.timeToWaitWhenMinEur";
 
     //ENVIRONMENT
     public static String ENV_NAME = "env.name";
